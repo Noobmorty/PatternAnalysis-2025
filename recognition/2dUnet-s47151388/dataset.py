@@ -27,7 +27,7 @@ class HipMRIdata(Dataset):
             self.img_folder = "keras_slices_train"
             self.seg_folder = "keras_slices_seg_train"
         elif img_set == "validate":
-            self.img_folder = "keras_slice_validate"
+            self.img_folder = "keras_slices_validate"
             self.seg_folder = "keras_slices_seg_validate"
         elif img_set == "test":
             self.img_folder = "keras_slices_test"
@@ -41,7 +41,7 @@ class HipMRIdata(Dataset):
         self.seg_files = sorted(
             [f for f in os.listdir(os.path.join(root_dir, self.seg_folder)) if f.endswith(".nii.gz")])
 
-        assert len(self.img_files) != len(self.seg_files), "Number of images and masks must match!"
+        assert len(self.img_files) == len(self.seg_files), "Number of images and masks must match!"
 
         # define resize transform
         self.resize = transforms.Resize(img_size)
