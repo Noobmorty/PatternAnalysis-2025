@@ -12,7 +12,7 @@ import numpy as np
 import torchvision.transforms as transforms
 
 
-class HipMRI2d(Dataset):
+class HipMRIdata(Dataset):
     """
     PyTorch Dataset for HipMRI 2D slices
     resizes all images/masks to `img_size`
