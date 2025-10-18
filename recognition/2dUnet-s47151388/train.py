@@ -99,6 +99,8 @@ def main():
                         # Ensure image is (C,H,W)
                         if img.dim() == 2:
                             img = img.unsqueeze(0)
+                        elif img.dim() == 3 and img.size(0) != 1:
+                            img = img[0:1, :, :]  # keep single channel for grayscale
 
                         # Predicted mask: argmax over channels → (1,H,W)
                         pred_mask = torch.argmax(outputs[j], dim=0, keepdim=True).float() / (outputs.size(1)-1)
