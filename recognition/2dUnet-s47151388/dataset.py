@@ -59,11 +59,11 @@ class HipMRIdata(Dataset):
 
         # remove extra dimension if present
         if img.ndim == 3:
-            img = img[:, :, 1]
+            img = img[:, :, 0]
         if seg.ndim == 3:
             seg = seg[:, :, 0]
 
-        img = (img - img.mean()) / img.std()
+        img = (img - img.mean()) / (img.std() + 1e-8)
 
         # add channel dimension
         img = np.expand_dims(img, axis=0)
@@ -71,7 +71,7 @@ class HipMRIdata(Dataset):
 
         # convert to tensors
         img = torch.tensor(img, dtype=torch.float32)
-        seg = torch.tensor(seg, dtype=torch.float32)
+        seg = torch.tensor(seg, dtype=torch.long)
 
         # optional resizing
         if self.apply_transform:
