@@ -1,10 +1,8 @@
-# predict.py
 """
 Performs model validation and computes average Dice coefficient.
-Author: Isaac Yu
+Author: Isaac Tiang
 """
 
-import os
 import torch
 from torch.utils.data import DataLoader
 from modules import UNet2D, DiceLoss
