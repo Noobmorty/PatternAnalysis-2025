@@ -1,3 +1,4 @@
+# predict.py
 """
 Performs model validation and computes average Dice coefficient.
 Author: Isaac Yu
@@ -16,13 +17,13 @@ def validate(model_path, data_root, device):
     """
     # Load trained model
     model = UNet2D(in_channels=1, num_classes=6, base_channels=32)
-    model.load_state_dict(torch.load(model_path))
+    model.load_state_dict(torch.load(model_path, map_location=device))
     model.to(device)
     model.eval()
 
     # Load dataset
-    val_dataset = HipMRIdata(data_root, img_set="validate", img_size=(256, 256))
-    val_loader = DataLoader(val_dataset, batch_size=4, shuffle=True)
+    val_dataset = HipMRIdata(data_root, img_set="validate", img_size=(256,256), apply_transform=True)
+    val_loader = DataLoader(val_dataset, batch_size=4, shuffle=False)
 
     # Dice loss (1 - Dice coefficient)
     dice = DiceLoss()
@@ -31,11 +32,10 @@ def validate(model_path, data_root, device):
     print("Running validation...")
     with torch.no_grad():
         for images, masks in val_loader:
-            images, masks = images.to(device), masks.to(device)
+            images, masks = images.to(device), masks.to(device).squeeze(1).long()  # squeeze channel dim
             preds = model(images)
-
             loss_val = dice(preds, masks)
-            scores.append(loss_val.item())
+            scores.append(1 - loss_val.item())  # Dice coefficient
 
     avg_dice = sum(scores) / len(scores)
     print(f"Average Dice coefficient: {avg_dice:.4f}")
