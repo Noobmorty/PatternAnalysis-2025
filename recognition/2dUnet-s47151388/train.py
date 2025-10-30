@@ -12,7 +12,7 @@ import matplotlib.pyplot as plt
 from torch.utils.data import DataLoader
 from torchvision.utils import save_image
 
-from modules import UNet2D, DiceLoss
+from modules import ImprovedUNet2D, DiceLoss
 from dataset import HipMRIdata
 
 
@@ -66,7 +66,7 @@ def main():
     val_loader = DataLoader(val_dataset, batch_size=batch_size, shuffle=False)
 
     # Model, Loss, Optimizer
-    model = UNet2D().to(device)
+    model = ImprovedUNet2D().to(device)
     criterion = DiceLoss()
     optimizer = optim.Adam(model.parameters(), lr=learning_rate)
 

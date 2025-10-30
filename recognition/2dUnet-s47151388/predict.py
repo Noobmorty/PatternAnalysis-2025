@@ -5,7 +5,7 @@ Author: Isaac Tiang
 
 import torch
 from torch.utils.data import DataLoader
-from modules import UNet2D, DiceLoss
+from modules import ImprovedUNet2D, DiceLoss
 from dataset import HipMRIdata
 
 
@@ -14,7 +14,7 @@ def validate(model_path, data_root, device):
     Validates the trained UNet model on the validation set.
     """
     # Load trained model
-    model = UNet2D(in_channels=1, num_classes=6, base_channels=32)
+    model = ImprovedUNet2D(in_channels=1, num_classes=6, dropout_prob=0.3)
     model.load_state_dict(torch.load(model_path, map_location=device))
     model.to(device)
     model.eval()

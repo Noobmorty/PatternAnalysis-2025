@@ -8,72 +8,80 @@ import torch.nn as nn
 import torch.nn.functional as F
 
 
-# Basic 2-layer convolution block with normalization & ReLU
-class ConvBlock(nn.Module):
-    def __init__(self, in_ch, out_ch):
-        super().__init__()
-        self.seq = nn.Sequential(
-            nn.Conv2d(in_ch, out_ch, kernel_size=3, padding=1),
-            nn.BatchNorm2d(out_ch),
-            nn.ReLU(inplace=True),
-            nn.Conv2d(out_ch, out_ch, kernel_size=3, padding=1),
-            nn.BatchNorm2d(out_ch),
-            nn.ReLU(inplace=True)
-        )
+# Residual block with dropout (2D)
+class ResidualBlock(nn.Module):
+    def __init__(self, in_channels, out_channels, dropout_prob=0.3):
+        super(ResidualBlock, self).__init__()
+        self.conv1 = nn.Conv2d(in_channels, out_channels, kernel_size=3, padding=1)
+        self.bn1 = nn.BatchNorm2d(out_channels)
+        self.conv2 = nn.Conv2d(out_channels, out_channels, kernel_size=3, padding=1)
+        self.bn2 = nn.BatchNorm2d(out_channels)
+        self.relu = nn.ReLU(inplace=True)
+        self.dropout = nn.Dropout2d(p=dropout_prob)
+
+        # Match channels if needed
+        if in_channels != out_channels:
+            self.shortcut = nn.Conv2d(in_channels, out_channels, kernel_size=1)
+        else:
+            self.shortcut = nn.Identity()
 
     def forward(self, x):
-        return self.seq(x)
+        residual = self.shortcut(x)
+        out = self.relu(self.bn1(self.conv1(x)))
+        out = self.dropout(out)
+        out = self.bn2(self.conv2(out))
+        out += residual
+        return self.relu(out)
 
 
-# 2D U-Net model
-class UNet2D(nn.Module):
-    """
-    A simplified 2D U-Net with skip connections
-    Each downsampling halves the resolution, and
-    each upsampling restores it via transposed convs
-    """
-
-    def __init__(self, in_channels=1, num_classes=6, base_channels=32):
-        super().__init__()
+# Improved 2D U-Net
+class ImprovedUNet2D(nn.Module):
+    def __init__(self, in_channels=1, num_classes=6, base_channels=32, dropout_prob=0.3):
+        super(ImprovedUNet2D, self).__init__()
 
         # Encoder
-        self.enc1 = ConvBlock(in_channels, base_channels)
-        self.enc2 = ConvBlock(base_channels, base_channels * 2)
-        self.enc3 = ConvBlock(base_channels * 2, base_channels * 4)
-        self.enc4 = ConvBlock(base_channels * 4, base_channels * 8)
-        self.pool = nn.MaxPool2d(2)
+        self.encoder1 = ResidualBlock(in_channels, base_channels, dropout_prob)
+        self.pool1 = nn.MaxPool2d(2)
+        self.encoder2 = ResidualBlock(base_channels, base_channels * 2, dropout_prob)
+        self.pool2 = nn.MaxPool2d(2)
+        self.encoder3 = ResidualBlock(base_channels * 2, base_channels * 4, dropout_prob)
+        self.pool3 = nn.MaxPool2d(2)
+        self.encoder4 = ResidualBlock(base_channels * 4, base_channels * 8, dropout_prob)
 
         # Decoder
-        self.up1 = nn.ConvTranspose2d(base_channels * 8, base_channels * 4, kernel_size=2, stride=2)
-        self.dec1 = ConvBlock(base_channels * 8, base_channels * 4)
+        self.upconv3 = nn.ConvTranspose2d(base_channels * 8, base_channels * 4, kernel_size=2, stride=2)
+        self.decoder3 = ResidualBlock(base_channels * 8, base_channels * 4, dropout_prob)
 
-        self.up2 = nn.ConvTranspose2d(base_channels * 4, base_channels * 2, kernel_size=2, stride=2)
-        self.dec2 = ConvBlock(base_channels * 4, base_channels * 2)
+        self.upconv2 = nn.ConvTranspose2d(base_channels * 4, base_channels * 2, kernel_size=2, stride=2)
+        self.decoder2 = ResidualBlock(base_channels * 4, base_channels * 2, dropout_prob)
 
-        self.up3 = nn.ConvTranspose2d(base_channels * 2, base_channels, kernel_size=2, stride=2)
-        self.dec3 = ConvBlock(base_channels * 2, base_channels)
+        self.upconv1 = nn.ConvTranspose2d(base_channels * 2, base_channels, kernel_size=2, stride=2)
+        self.decoder1 = ResidualBlock(base_channels * 2, base_channels, dropout_prob)
 
         # Output
-        self.output_layer = nn.Conv2d(base_channels, num_classes, kernel_size=1)
+        self.final_conv = nn.Conv2d(base_channels, num_classes, kernel_size=1)
 
     def forward(self, x):
-        # Down path
-        d1 = self.enc1(x)
-        d2 = self.enc2(self.pool(d1))
-        d3 = self.enc3(self.pool(d2))
-        d4 = self.enc4(self.pool(d3))
+        # Encoding path
+        enc1 = self.encoder1(x)
+        enc2 = self.encoder2(self.pool1(enc1))
+        enc3 = self.encoder3(self.pool2(enc2))
+        enc4 = self.encoder4(self.pool3(enc3))
 
-        # Up path with skip connections
-        x = self.up1(d4)
-        x = self.dec1(torch.cat([x, d3], dim=1))
+        # Decoding path with skip connections
+        dec3 = self.upconv3(enc4)
+        dec3 = torch.cat((dec3, enc3), dim=1)
+        dec3 = self.decoder3(dec3)
 
-        x = self.up2(x)
-        x = self.dec2(torch.cat([x, d2], dim=1))
+        dec2 = self.upconv2(dec3)
+        dec2 = torch.cat((dec2, enc2), dim=1)
+        dec2 = self.decoder2(dec2)
 
-        x = self.up3(x)
-        x = self.dec3(torch.cat([x, d1], dim=1))
+        dec1 = self.upconv1(dec2)
+        dec1 = torch.cat((dec1, enc1), dim=1)
+        dec1 = self.decoder1(dec1)
 
-        return self.output_layer(x)
+        return self.final_conv(dec1)
 
 
 # Dice Loss implementation
