@@ -1,39 +1,79 @@
-# Segmentation of the HipMRI Study on Prostate Cancer with 2D UNet
+# Segmentation of the HipMRI Study on Prostate Cancer with 2D Improved UNet
 
 # Overview
-This task implements a 2D UNet convolutional neural network for segmentation of MRI images
-from the HipMRI study on Prostate Cancer.
+This task implements a lightweight improved 2D UNet designed for segmentation of HipMRI images
+from the HipMRI study on Prostate Cancer. The model keeps a canonical encoder-decoder shape
+with symmetric skip connections but introduces a few improvements to stabilise training and 
+improve segmentation quality on the medical datasets.
 
 # UNet architecture
 
-The model that I implemented for this task is a lightweight 2D UNet designed for medical
-image segmentation on HipMRI slices. The model follows the standard encoder-decoder architecture
-with skip connections.
+On a high level, the UNet architecture takes in a single-channel MRI slice (grayscale) as input
+and outputs per-pixel logits for 6 classes (background + 5 tissue labels). It has a base feature 
+width of 32 channels and for depth, it has 3 downsampling/ upsampling levels. In its final output 
+layer, it has a 1x1 convolution -> multichannel logits.
 
-The encoder consists of 4 convolutional blocks, with 2 3x3 convolutions with padding=1,
-followed by a BatchNorm2d and ReLU activations. In between these blocks is a 2x2 max pooling
-layer with stride 2 downsamples the feature maps, doubling the number of channels. 
+# Encoder
 
-The decoder mirrors the encoder but implements upsampling by a 2x2 transposed convolution(stride 2).
-The upsampled feature map is concatenated with the corresponding encoder block output to keep the 
-spatial details. They are then refined by a conv block similar to the encoder blocks.
+Each encoder block consists of two 3x3 convolutions (padding=1),
+BatchNorm2D after each conv,
+ReLU activations,
+optional residual/skip inside block,
+2x2 MaxPool between blocks to downsample spatial resolution
 
-In the output layer, a 1x1 convolution maps the decoder output to six segmentation classes.
-During interference, a softmax activation is applied to get per pixel probabilities.
+Channel progression (default): 32 -> 64 -> 128 -> 256 (depending on base_channels)
 
-Design adjustments:
-    Input size: 256x256 grayscale images.
-    Output size: 256x256 segment maps
-    Base feature width: 32 channels
-    Depth: 3 encoder decoder levels instead of 4 to prevent latent space from being too small
-            given the dataset dimensions provided
-    Normalisation: BatchNorm2D applied after each convolution
-    Activation: ReLU
+# Bottleneck
 
-The architecture retains the core advantages of what a UNet provides while still being lightweight
-to be able to train on consumer level GPUs.
+Two conv layers with batch norm + ReLU (same pattern as encoder).
+optionally larger channel count to increase representational power.
 
-The architecture of U-Net can be seen in /recognition/2dUnet-s47151388/U-Net architecture.png
+# Decoder
+
+Each decoder consists of transposed convolution (stride=2) to upsample,
+concatenate the upsampled features with encoder skip features,
+two 3x3 convs + BatchNorm + ReLU (optionally residual).
+
+This restores the spatial detail while combining coarse and fine features.
+
+# Output
+
+a 1x1 conv to map to num_classes channels.
+At inference apply softmax across channel dimensions to get per-class probabilities.
+
+# Improvements made vs a plain UNet
+
+This implementation includes several improvements which includes:
+
+1. Residual connection inside convolutional blocks:
+        This makes optimisation easier for deeper nets and helps gradients flow 
+        and stabilises training.
+
+2. Batch Normalisation:
+        After each convolution to stabilise and speed up convergence.
+
+3. Dropout (configurable):
+        Small spatial dropout in decoder/bottleneck to reduce overfitting when training
+        data is limited.
+
+4. Dice loss:
+        Directly optimises the overlap metric used for evaluation. The dice loss is
+        implemented to handle class wise dice and average over classes.
+
+5. Simple, consistent resizing:
+        All slices resized to 256x256 so model get consistent inputs
+
+6. Lightweight design:
+        Fewer downsampling levels and moderate base_channels (32) to reduce GPU mem and
+        training time.
+
+# Data processing and augmentation
+
+Nifti slices were loaded using nibabel.
+Slices may have an extra dimension: handled by indexing [...,0] when needed.
+Image normalisation: (img - mean) / (std + 1e-8)
+Resize to (256, 256) during dataset __getitem__
+
 
 # Dependencies
 
@@ -44,3 +84,64 @@ The dependencies needed for this project are as listed below:
     -nibabel 5.2.1
     -matplotlib 3.9.1
     -tqdm 4.66.5
+
+# Training setup
+
+Hyperparameters used:
+
+    Optimizer: Adam
+    Learning rate: 0.001
+    Batch size: 8 (increase if have more GPU memory)
+    Epochs: 50
+    Loss: multiclass DiceLoss (implemented in modules.py)
+    Device: CUDA if available
+
+Checkpointing:
+    
+    Script saves:
+        unet_epoch{...}.pth every 10 epochs
+        unet_best.pth whenever validation loss improves
+        unet_latest.pth (final weights)
+
+    During checkpoint save, i also optionally export a small set of prediction images
+    (input | predicted mask | ground truth) to an outputs/ folder for visual monitoring.
+
+# Training results
+
+The 2D UNet model was trained on the provided dataset for 50 epochs uisng the CUDA device.
+During training, both training and validation losses were monitored to obtain the best epoch
+
+Initial training loss: 0.2601 (epoch 1)
+Best validation loss: 0.1495 (epoch 27)
+Final training loss: 0.0761 (epoch 50)
+Final validation loss: 0.1956 (epoch 50)
+
+Throughout training the model showed steady improvement in performance, with significant
+reductions in both training and validation losses during the first 20 epochs.
+The validation loss stabilised around later epochs, indicating the model had converged effectively
+without severe overfitting.
+
+The best performing model was saved at epoch 27, achieving the lowest validation loss of 0.1495.
+
+# Validation and prediction results
+
+After training, the saved best model was evaluated on the validation dataset using the predict.py
+script. The model achieved an average Dice coefficient of 0.8044, demonstrating strong segmentation
+accuracy and effective generalization across unseen data.
+
+# References
+
+Ronneberger, O., Fischer, P., & Brox, T. (2015). U-Net: Convolutional Networks for Biomedical 
+    Image Segmentation. In W. M. Wells, A. F. Frangi, N. Navab, & J. Hornegger (Eds.), Medical
+    Image Computing and Computer-Assisted Intervention -- MICCAI 2015 (Vol. 9351, pp. 234–241).
+    Springer International Publishing AG. https://doi.org/10.1007/978-3-319-24574-4_28
+
+Paszke, A., Gross, S., Massa, F., Lerer, A., Bradbury, J., Chanan, G., Killeen, T., Lin, Z., 
+    Gimelshein, N., Antiga, L., Desmaison, A., Köpf, A., Yang, E., DeVito, Z., Raison, M., Tejani,
+    A., Chilamkurthy, S., Steiner, B., Fang, L., … Chintala, S. (2019). PyTorch: An Imperative Style,
+    High-Performance Deep Learning Library. https://doi.org/10.48550/arxiv.1912.01703
+
+DigitalSreeni (2021) 219 - Understanding U-Net architecture and building it from scratch
+https://youtu.be/GAYJ81M58y8?si=YuUF7ta1zMeeL2AW
+
+OpenAI. (2025). ChatGPT (GPT-5) Large language model. Retrieved from https://chat.openai.com

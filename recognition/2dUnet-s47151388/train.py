@@ -46,7 +46,7 @@ def main():
     # Hyper parameters
     batch_size = 8
     learning_rate = 0.001
-    num_epochs = 20
+    num_epochs = 50
 
     # Paths
     data_root = r"C:\Users\isaac\keras_slices_data"
@@ -84,8 +84,8 @@ def main():
 
         print(f"Epoch {epoch+1}/{num_epochs} | Train Loss: {train_loss:.4f} | Val Loss: {val_loss:.4f}")
 
-        # Save prediction images every 5 epochs
-        if (epoch + 1) % 5 == 0:
+        # Save prediction images every 10 epochs
+        if (epoch + 1) % 10 == 0:
             model.eval()
             with torch.no_grad():
                 for i, (images, masks) in enumerate(val_loader):
