@@ -13,6 +13,8 @@ and outputs per-pixel logits for 6 classes (background + 5 tissue labels). It ha
 width of 32 channels and for depth, it has 3 downsampling/ upsampling levels. In its final output 
 layer, it has a 1x1 convolution -> multichannel logits.
 
+![UNet architecture](U-Net%20architecture.png)
+
 # Encoder
 
 Each encoder block consists of two 3x3 convolutions (padding=1),
@@ -122,6 +124,8 @@ The validation loss stabilised around later epochs, indicating the model had con
 without severe overfitting.
 
 The best performing model was saved at epoch 27, achieving the lowest validation loss of 0.1495.
+
+![Training and Validation loss](models/training_curve.png)
 
 # Validation and prediction results
 
